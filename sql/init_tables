@@ -1,0 +1,105 @@
+DROP TABLE IF EXISTS promotion_product CASCADE;
+DROP TABLE IF EXISTS order_item CASCADE;
+DROP TABLE IF EXISTS "order" CASCADE;
+DROP TABLE IF EXISTS product CASCADE;
+DROP TABLE IF EXISTS promotion CASCADE;
+DROP TABLE IF EXISTS seller CASCADE;
+DROP TABLE IF EXISTS category CASCADE;
+DROP TABLE IF EXISTS brand CASCADE;
+
+CREATE TABLE brand (
+    brand_id SERIAL PRIMARY KEY,
+    brand_name VARCHAR(100) NOT NULL,
+    country VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE category (
+    category_id SERIAL PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL,
+    parent_category_id INT REFERENCES category(category_id),
+    level SMALLINT CHECK (level IN (1, 2)),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE seller (
+    seller_id SERIAL PRIMARY KEY,
+    seller_name VARCHAR(150) NOT NULL,
+    join_date DATE,
+    seller_type VARCHAR(50) CHECK (seller_type IN ('Official', 'Marketplace')),
+    rating DECIMAL(2,1) CHECK (rating >= 0 AND rating <= 5),
+    country VARCHAR(50) DEFAULT 'Vietnam'
+);
+
+CREATE TABLE product (
+    product_id SERIAL PRIMARY KEY,
+    product_name VARCHAR(200) NOT NULL,
+    category_id INT REFERENCES category(category_id),
+    brand_id INT REFERENCES brand(brand_id),
+    seller_id INT REFERENCES seller(seller_id),
+    price DECIMAL(12,2) NOT NULL,
+    discount_price DECIMAL(12,2),
+    stock_qty INT DEFAULT 0,
+    rating FLOAT CHECK (rating >= 0 AND rating <= 5),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE,
+    CHECK (discount_price <= price)
+);
+
+CREATE TABLE "order" (
+    order_id SERIAL PRIMARY KEY,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    seller_id INT REFERENCES seller(seller_id),
+    status VARCHAR(20) CHECK (status IN ('PLACED', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED')),
+    total_amount DECIMAL(12,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE order_item (
+    order_item_id SERIAL PRIMARY KEY,
+    order_id INT REFERENCES "order"(order_id),
+    product_id INT REFERENCES product(product_id),
+    quantity INT NOT NULL CHECK (quantity > 0),
+    unit_price DECIMAL(12,2) NOT NULL,
+    subtotal DECIMAL(12,2) NOT NULL
+);
+
+CREATE TABLE promotion (
+    promotion_id SERIAL PRIMARY KEY,
+    promotion_name VARCHAR(100) NOT NULL,
+    promotion_type VARCHAR(50),
+    discount_type VARCHAR(20) CHECK (discount_type IN ('percentage', 'fixed_amount')),
+    discount_value NUMERIC(10,2),
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    CHECK (end_date >= start_date)
+);
+
+CREATE TABLE promotion_product (
+    promo_product_id SERIAL PRIMARY KEY,
+    promotion_id INT REFERENCES promotion(promotion_id),
+    product_id INT REFERENCES product(product_id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+CREATE OR REPLACE FUNCTION decrease_stock_after_order()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE product
+    SET stock_qty = stock_qty - NEW.quantity
+    WHERE product_id = NEW.product_id;
+    
+    IF (SELECT stock_qty FROM product WHERE product_id = NEW.product_id) < 0 THEN
+        RAISE EXCEPTION 'Sản phẩm ID % đã hết hàng!', NEW.product_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_stock_on_order
+AFTER INSERT ON order_item
+FOR EACH ROW
+EXECUTE FUNCTION decrease_stock_after_order();

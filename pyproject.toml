@@ -10,7 +10,6 @@ python = "^3.12"
 faker = "^40.11.0"
 pandas = "^3.0.1"
 psycopg2-binary = "^2.9.11"
-sqlalchemy = "^2.0.48"
 
 
 [build-system]
