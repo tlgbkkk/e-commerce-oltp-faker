@@ -1,3 +1,5 @@
+from datetime import datetime
+
 DB_CONFIG = {
     "host": "localhost",
     "user": "postgres",
@@ -7,6 +9,8 @@ DB_CONFIG = {
 }
 
 SEED = 42
+
+# MASTER CONFIGURATION
 
 DATA_VOLUME = {
     "brand": 20,
@@ -27,3 +31,13 @@ CATEGORY_MAP = {
 
 PROMO_NAMES = ["Mega Sale", "Flash Deal", "Black Friday", "Birthday", "Holiday"]
 PROMO_TYPES = ["Seasonal", "Flash Sale", "Member Only", "Voucher Code"]
+
+# TRANSACTION CONFIGURATION
+
+TOTAL_ORDERS = 2500000
+BATCH_SIZE = 100000
+START_DATE = datetime(2025, 8, 1)
+END_DATE = datetime(2025, 10, 31)
+
+STATUSES = ['PLACED', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED']
+WEIGHTS = [5, 4, 11, 70, 7, 3]

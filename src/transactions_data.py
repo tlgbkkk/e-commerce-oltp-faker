@@ -1,21 +1,12 @@
 import random
 import io
 import csv
-from datetime import datetime, timedelta
+from datetime import timedelta
 from collections import defaultdict
 from database import connect
-from config import SEED
+from config import SEED, TOTAL_ORDERS, BATCH_SIZE, START_DATE, END_DATE, STATUSES, WEIGHTS
 
 random.seed(SEED)
-
-# Data Configuration
-TOTAL_ORDERS = 2500000
-BATCH_SIZE = 100000
-START_DATE = datetime(2025, 8, 1)
-END_DATE = datetime(2025, 10, 31)
-
-STATUSES = ['PLACED', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED']
-WEIGHTS = [5, 4, 11, 70, 7, 3]
 
 def get_random_date():
     delta = END_DATE - START_DATE
