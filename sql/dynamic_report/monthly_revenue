@@ -1,0 +1,25 @@
+CREATE OR REPLACE FUNCTION report_monthly_revenue(
+    p_start_date TIMESTAMP,
+    p_end_date TIMESTAMP
+) RETURNS TABLE (
+    month TEXT,
+    total_orders BIGINT,
+    total_quantity BIGINT,
+    total_revenue NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        TO_CHAR(DATE_TRUNC('month', o.order_date), 'MM/YYYY') AS month,
+        COUNT(DISTINCT o.order_id) AS total_orders,
+        SUM(oi.quantity) AS total_quantity,
+        SUM(oi.subtotal) AS total_revenue
+    FROM "order" o
+    JOIN order_item oi ON o.order_id = oi.order_id
+    WHERE o.order_date >= p_start_date AND o.order_date <= p_end_date
+    GROUP BY DATE_TRUNC('month', o.order_date)
+    ORDER BY DATE_TRUNC('month', o.order_date);
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM report_monthly_revenue('2025-08-01', '2025-10-31');

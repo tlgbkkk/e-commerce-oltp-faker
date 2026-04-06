@@ -1,0 +1,27 @@
+CREATE OR REPLACE FUNCTION report_daily_revenue(
+    p_start_date TIMESTAMP,
+    p_end_date TIMESTAMP,
+    p_product_ids INT[] DEFAULT NULL
+) RETURNS TABLE (
+    date DATE,
+    total_orders BIGINT,
+    total_quantity BIGINT,
+    total_revenue NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        o.order_date::DATE AS date,
+        COUNT(DISTINCT o.order_id) AS total_orders,
+        SUM(oi.quantity) AS total_quantity,
+        SUM(oi.subtotal) AS total_revenue
+    FROM "order" o
+    JOIN order_item oi ON o.order_id = oi.order_id
+    WHERE o.order_date >= p_start_date AND o.order_date <= p_end_date
+      AND (p_product_ids IS NULL OR oi.product_id = ANY(p_product_ids))
+    GROUP BY o.order_date::DATE
+    ORDER BY o.order_date::DATE;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM report_daily_revenue('2025-08-01', '2025-10-31', ARRAY[36]);

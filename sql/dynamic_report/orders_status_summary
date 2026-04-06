@@ -1,0 +1,28 @@
+CREATE OR REPLACE FUNCTION report_orders_status_summary(
+    p_start_date TIMESTAMP,
+    p_end_date TIMESTAMP,
+    p_seller_ids INT[] DEFAULT NULL,
+    p_category_ids INT[] DEFAULT NULL
+) RETURNS TABLE (
+    status VARCHAR,
+    total_orders BIGINT,
+    total_revenue NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        o.status::VARCHAR,
+        COUNT(DISTINCT o.order_id) AS total_orders,
+        SUM(oi.subtotal) AS total_revenue
+    FROM "order" o
+    JOIN order_item oi ON o.order_id = oi.order_id
+    JOIN product p ON oi.product_id = p.product_id
+    WHERE o.order_date >= p_start_date AND o.order_date <= p_end_date
+      AND (p_seller_ids IS NULL OR o.seller_id = ANY(p_seller_ids))
+      AND (p_category_ids IS NULL OR p.category_id = ANY(p_category_ids))
+    GROUP BY o.status
+    ORDER BY total_revenue DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM report_orders_status_summary('2025-08-01', '2025-10-31');
