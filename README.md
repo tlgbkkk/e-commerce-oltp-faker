@@ -1,117 +1,153 @@
-# E - Commerce OLTP Faker System
+# E-Commerce OLTP Faker System
 
-A minimal e-commerce OLTP schema on PostgreSQL plus a Python script to generate fake data (Faker) and bulk-ingest it into the database.
+A fake data generation system for an e-commerce OLTP model on **PostgreSQL**, including a Python script that automatically creates master data (via Faker), high-volume transactional data (Orders/Items), and dynamic reporting functions.
 
-## What’s inside
+---
 
-- `sql/init_tables`: Creates the schema (brand/category/seller/product/promotion/order/order_item/promotion_product) + a trigger that decreases stock on `order_item` inserts.
-- `src/main.py`: Generates fake data and inserts it into PostgreSQL.
-- `src/config.py`: DB connection config + seed + data volume knobs.
-- `src/database.py`: `connect()` helper using `psycopg2`.
+### File Descriptions
 
-## Requirements
+| File                      | Description                                                                                                                |
+|---------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `sql/init_tables.sql`     | Creates the full schema: `brand`, `category`, `seller`, `product`, `promotion`, `order`, `order_item`, `promotion_product` |
+| `sql/query/` | Contains raw SQL scripts for analysis and snapshot reporting (e.g., monthly revenue, top-selling products, order filtering)
+| `sql/dynamic_report/`     | PL/pgSQL dynamic reporting functions (revenue, seller performance, top products)                                           |
+| `src/master_data.py`      | Generates fake data (Master Data) and inserts into PostgreSQL                                                              |
+| `src/transaction_data.py` | Generates Transaction Data and bulk-inserts it into PostgreSQL                                                             |
+| `src/config.py`           | DB connection settings, random seed, and data volume control parameters (e.g. 2.5 million orders)                          |
+| `src/database.py`         | `connect()` helper for PostgreSQL via `psycopg2`                                                                           |
 
-- PostgreSQL (tested with `psql 16.x`)
-- Python `3.12`
-- Poetry (tested with `Poetry 1.8.x`)
+---
+
+## ⚙️ Requirements
+
+- **PostgreSQL** (tested with `psql 16.x`)
+- **Python** `3.12`
+- **Poetry** (tested with `Poetry 1.8.x`)
+
+---
 
 ## Quickstart
 
-### 1) Install dependencies
+### 1. Install dependencies
 
 ```bash
 poetry install
 ```
 
-### 2) Configure the database
+### 2. Configure the database connection
 
-Update `DB_CONFIG` in `src/config.py` for your environment.
+Update `DB_CONFIG` in `src/config.py` to match your environment.
 
-Current defaults:
+Default configuration:
 
-- host: `localhost`
-- user: `postgres`
-- password: `170723`
-- database: `ecommerce_oltp`
-- port: `5432`
+```python
+DB_CONFIG = {
+    "host":     "localhost",
+    "user":     "postgres",
+    "password": "170723",
+    "database": "ecommerce_oltp",
+    "port":     5432,
+}
+```
 
-### 3) Create the database + schema
+### 3. Create the database and schema
 
-Note: `sql/init_tables` contains `DROP TABLE IF EXISTS ...`, so it will remove existing data.
+> **Warning:** `sql/init_tables.sql` contains `DROP TABLE IF EXISTS ...` statements — all existing data will be erased when re-run.
 
 ```bash
-# create database (if needed)
+# Create the database (if it does not exist)
 psql -U postgres -c "CREATE DATABASE ecommerce_oltp;"
 
-# create tables + trigger
-psql -U postgres -d ecommerce_oltp -f sql/init_tables
+# Create tables
+psql -U postgres -d ecommerce_oltp -f sql/init_tables.sql
 ```
 
-### 4) Generate data and ingest into PostgreSQL
+### 4. Generate and load data into PostgreSQL
 
-Run from the repo root:
+Run from the project root directory:
 
 ```bash
-poetry run python src/main.py
+# Generate master data
+poetry run python src/master_data.py
+
+# Generate transaction data
+poetry run python src/transaction_data.py
 ```
 
-Without Poetry:
+This will automatically generate and bulk-insert millions of rows depending on the configuration in `config.py`.
 
-```bash
-python3 src/main.py
-```
+---
 
-## What gets inserted
+## Generated Data
 
-`src/main.py` currently inserts:
+`src/master_data.py` and `src/transaction_data.py` produces two categories of data:
 
-- `brand`
-- `category` (level 1 and level 2 with parent-child relationships)
-- `seller`
-- `promotion`
-- `promotion_product`
-- `product` (`discount_price` is computed from the best promotion for that product, with a 10% price floor)
+### Master Data
 
-Tables `order` and `order_item` exist in the schema, they will be used in next project.
+| Table | Description |
+|-------|-------------|
+| `brand` | Product brands |
+| `category` | Level-1 and level-2 categories (parent–child relationship) |
+| `seller` | Sellers / vendors |
+| `promotion` | Promotional campaigns |
+| `promotion_product` | Promotion ↔ product mapping |
+| `product` | Products — `discount_price` is computed from the best applicable promotion, with a minimum floor of 10% of the original price |
 
-## Tuning data volume
+### Transaction Data (High Volume)
 
-Edit in `src/config.py`:
+| Table | Description |
+|-------|-------------|
+| `order` | Millions of orders distributed across a pre-configured date range |
+| `order_item` | 2–4 randomly selected products per order, linked to products with subtotal calculations |
 
-- `SEED`: reproducibility.
-- `DATA_VOLUME`: record counts per table.
-- `CATEGORY_MAP`, `PROMO_NAMES`, `PROMO_TYPES`: sampling pools for random generation.
+---
 
-## Quick checks in SQL
+## Querying & Dynamic Reports
+
+Once data has been loaded, use the built-in functions to generate business insights. All functions support optional filter parameters (date ranges, seller lists, product lists, etc.).
+
+### 1. Monthly Revenue Report
 
 ```sql
--- Count rows in main tables
-SELECT 'brand' AS t, COUNT(*) FROM brand
-UNION ALL SELECT 'category', COUNT(*) FROM category
-UNION ALL SELECT 'seller', COUNT(*) FROM seller
-UNION ALL SELECT 'product', COUNT(*) FROM product
-UNION ALL SELECT 'promotion', COUNT(*) FROM promotion
-UNION ALL SELECT 'promotion_product', COUNT(*) FROM promotion_product;
+SELECT * FROM report_monthly_revenue('2025-08-01', '2025-10-31');
 ```
 
-Example: products joined with seller/brand/category:
+### 2. Daily Revenue Report (filtered by Product IDs)
 
 ```sql
-SELECT
-  p.product_id, p.product_name, p.price, p.discount_price, p.stock_qty,
-  s.seller_name,
-  b.brand_name,
-  c.category_name
-FROM product p
-JOIN seller s ON s.seller_id = p.seller_id
-JOIN brand b ON b.brand_id = p.brand_id
-JOIN category c ON c.category_id = p.category_id
-ORDER BY p.product_id
-LIMIT 20;
+SELECT * FROM report_daily_revenue('2025-08-01', '2025-10-31', ARRAY[10, 25, 40]);
 ```
 
-## Troubleshooting
+### 3. Seller Performance (filtered by Brand ID)
 
-- `Database connection error: ...`: verify `src/config.py`, PostgreSQL is running, credentials are correct, and the database exists.
-- `permission denied for database ...`: grant privileges or use a privileged user (for example `postgres`) when creating DB/schema.
-- Slow runs: reduce `DATA_VOLUME["product"]` or scale up DB resources; the script uses bulk inserts and should be fast for moderate datasets.
+```sql
+-- Signature: (start_date, end_date, category_id, brand_id)
+-- Pass NULL to skip any individual filter
+SELECT * FROM report_seller_performance('2025-08-01', '2025-10-31', NULL, 5);
+```
+
+### 4. Top Products per Brand (filtered by Seller IDs)
+
+```sql
+SELECT * FROM report_top_products_per_brand('2025-08-01', '2025-10-31', ARRAY[1, 2, 3]);
+```
+
+### 5. Order Status Summary
+
+```sql
+SELECT * FROM report_orders_status_summary('2025-08-01', '2025-10-31', NULL, NULL);
+```
+
+---
+
+## Tuning Data Volume
+
+Edit the parameters in `src/config.py`:
+
+| Parameter | Description |
+|-----------|-------------|
+| `SEED` | Random seed for reproducibility |
+| `DATA_VOLUME` | Number of records per table (e.g. increase `orders` to `5_000_000` for heavy load testing) |
+| `CATEGORY_MAP` | Sample pool for category generation |
+| `PROMO_NAMES` | Sample promotion name pool |
+| `PROMO_TYPES` | Sample promotion type pool |
